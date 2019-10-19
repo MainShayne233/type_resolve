@@ -80,6 +80,14 @@ defmodule TypeResolveTest do
       quoted_spec = quote(do: (... -> atom()))
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:function, [{:any, {:atom, []}}]}}
     end
+
+    test "should resolve literal integers" do
+      quoted_spec = quote(do: 5)
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:literal, [5]}}
+
+      quoted_spec = quote(do: 1..10)
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:literal, [1..10]}}
+    end
   end
 
   defp apply_args({quoted_spec_name, options, params}) do

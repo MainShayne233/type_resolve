@@ -74,7 +74,13 @@ defmodule TypeResolve do
     end
   end
 
-  def resolve(atom) when is_atom(atom), do: {:ok, {:literal, [atom]}}
+  defguardp is_literal(value) when is_atom(value) or is_integer(value)
+
+  def resolve(literal) when is_literal(literal), do: {:ok, {:literal, [literal]}}
+
+  def resolve({:.., _, [min, max]}) when is_integer(min) and is_integer(max) do
+    {:ok, {:literal, [min..max]}}
+  end
 
   def resolve({:<<>>, [], args}) do
     {size, unit} =
