@@ -74,10 +74,26 @@ defmodule TypeResolve do
     end
   end
 
-  defguardp is_literal(value) when is_atom(value)
+  def resolve(atom) when is_atom(atom), do: {:ok, {:literal, [atom]}}
 
-  def resolve(literal) when is_literal(literal) do
-    {:ok, {:literal, [literal]}}
+  def resolve({:<<>>, [], args}) do
+    {size, unit} =
+      case args do
+        [] ->
+          {0, nil}
+
+        [{:"::", _, [{:_, _, _}, size]}] when is_integer(size) ->
+          {size, nil}
+
+        [{:"::", _, [{:_, _, _}, {:*, _, [{:_, _, _}, unit]}]}] when is_integer(unit) ->
+          {nil, unit}
+
+        [{:"::", _, [{:_, _, _}, size]}, {:"::", _, [{:_, _, _}, {:*, _, [{:_, _, _}, unit]}]}]
+        when is_integer(size) and is_integer(unit) ->
+          {size, unit}
+      end
+
+    {:ok, {:bitstring, [size, unit]}}
   end
 
   def resolve(other) do

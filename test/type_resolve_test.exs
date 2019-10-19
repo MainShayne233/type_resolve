@@ -42,6 +42,34 @@ defmodule TypeResolveTest do
     end
   end
 
+  describe "literals" do
+    test "should resolve literal types" do
+      quoted_spec = quote(do: :an_atom)
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:literal, [:an_atom]}}
+
+      quoted_spec = quote(do: true)
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:literal, [true]}}
+
+      quoted_spec = quote(do: nil)
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:literal, [nil]}}
+    end
+
+    test "should resolve literal bitstring specs" do
+      quoted_spec = quote(do: <<>>)
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:bitstring, [0, nil]}}
+
+
+      quoted_spec = quote(do: <<_::5>>)
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:bitstring, [5, nil]}}
+
+      quoted_spec = quote(do: <<_::_*6>>)
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:bitstring, [nil, 6]}}
+
+      quoted_spec = quote(do: <<_::7, _::_*8>>)
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:bitstring, [7, 8]}}
+    end
+  end
+
   defp apply_args({quoted_spec_name, options, params}) do
     args =
       Enum.take(
