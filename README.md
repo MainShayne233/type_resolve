@@ -1,21 +1,11 @@
 # TypeResolve
 
-**TODO: Add description**
+## Definitions
 
-## Installation
+**Spec**: A type definition in source format (i.e. `integer()` or `String.t()`)
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `type_resolve` to your list of dependencies in `mix.exs`:
+**Quoted Spec**: A spec, but when in it's AST form (i.e. `{:integer, [], []}` or `{{:., [], [{:__aliases__, [alias: false], [:String]}, :t]}, [], []}`)
 
-```elixir
-def deps do
-  [
-    {:type_resolve, "~> 0.1.0"}
-  ]
-end
-```
+**Type**: The runtime value representing a spec (i.e. `:integer`)
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/type_resolve](https://hexdocs.pm/type_resolve).
-
+**Resolve**: Get the type for a spec (i.e. `resolve(integer()) == :integer`)
