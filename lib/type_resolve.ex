@@ -28,17 +28,74 @@ defmodule TypeResolve do
     nonempty_maybe_improper_list: quote(do: nonempty_maybe_improper_list(type1, type2))
   }
 
+  @built_in_types %{
+    term: quote(do: term()),
+    arity: quote(do: arity()),
+    as_boolean: quote(do: as_boolean(t)),
+    binary: quote(do: binary()),
+    bitstring: quote(do: bitstring()),
+    boolean: quote(do: boolean()),
+    byte: quote(do: byte()),
+    char: quote(do: char()),
+    charlist: quote(do: charlist()),
+    nonempty_charlist: quote(do: nonempty_charlist()),
+    fun: quote(do: fun()),
+    function: quote(do: function()),
+    identifier: quote(do: identifier()),
+    iodata: quote(do: iodata()),
+    iolist: quote(do: iolist()),
+    keyword: quote(do: keyword(t)),
+    list: quote(do: list()),
+    nonempty_list: quote(do: nonempty_list()),
+    maybe_improper_list: quote(do: maybe_improper_list()),
+    nonempty_maybe_improper_list: quote(do: nonempty_maybe_improper_list()),
+    mfa: quote(do: mfa()),
+    module: quote(do: module()),
+    no_return: quote(do: no_return()),
+    node: quote(do: node()),
+    number: quote(do: number()),
+    struct: quote(do: struct()),
+    timeout: quote(do: timeout())
+  }
+
   @spec __basic_types__ :: %{required(type_name) => quoted_spec()}
   def __basic_types__, do: @basic_types
 
+  @spec __built_in_types__ :: %{required(type_name) => quoted_spec()}
+  def __built_in_types__, do: @built_in_types
+
   @spec resolve(quoted_spec()) :: result(type())
 
-  for {type, quoted_spec} <- @basic_types do
-    def resolve(unquote(Macro.escape(quoted_spec))), do: {:ok, unquote(type)}
+  for {type, {quoted_spec_name, _, _params}} <- Map.merge(@basic_types, @built_in_types) do
+    def resolve({unquote(quoted_spec_name), _, params}) do
+      with {:ok, resolved_params} <- maybe_map(params, &resolve/1) do
+        {:ok, {unquote(type), resolved_params}}
+      end
+    end
+  end
+
+  defguardp is_literal(value) when is_atom(value)
+
+  def resolve(literal) when is_literal(literal) do
+    {:ok, {:literal, [literal]}}
   end
 
   def resolve(other) do
     IO.inspect(other, label: "Failed to resolve")
     :error
+  end
+
+  @spec maybe_map(Enumerable.t(), (term -> result(term))) :: {:ok, list(term())} | :error
+  defp maybe_map(enum, map) do
+    Enum.reduce_while(enum, [], fn value, acc ->
+      case map.(value) do
+        {:ok, mapped_value} -> {:cont, [mapped_value | acc]}
+        :error -> {:halt, :error}
+      end
+    end)
+    |> case do
+      acc when is_list(acc) -> {:ok, Enum.reverse(acc)}
+      :error -> :error
+    end
   end
 end
