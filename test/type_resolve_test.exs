@@ -7,4 +7,8 @@ defmodule TypeResolveTest do
       assert TypeResolve.resolve(quoted_spec) == {:ok, type}
     end
   end
+
+  test "should return :error for invalid quoted spec" do
+    assert TypeResolve.resolve(quote(do: kitty())) == :error
+  end
 end

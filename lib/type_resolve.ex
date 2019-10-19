@@ -1,4 +1,11 @@
 defmodule TypeResolve do
+  @type result(data) :: {:ok, data} | :error
+  @type quoted_spec :: Macro.t()
+  @type type_name :: atom()
+  @type type_args :: [type()]
+  @type type :: {type_name(), type_args()}
+  @type basic_type :: term()
+
   @basic_types %{
     any: quote(do: any()),
     none: quote(do: none()),
@@ -21,9 +28,17 @@ defmodule TypeResolve do
     nonempty_maybe_improper_list: quote(do: nonempty_maybe_improper_list(type1, type2))
   }
 
+  @spec __basic_types__ :: %{required(type_name) => quoted_spec()}
   def __basic_types__, do: @basic_types
+
+  @spec resolve(quoted_spec()) :: result(type())
 
   for {type, quoted_spec} <- @basic_types do
     def resolve(unquote(Macro.escape(quoted_spec))), do: {:ok, unquote(type)}
+  end
+
+  def resolve(other) do
+    IO.inspect(other, label: "Failed to resolve")
+    :error
   end
 end
