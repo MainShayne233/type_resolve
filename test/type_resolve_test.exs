@@ -58,7 +58,6 @@ defmodule TypeResolveTest do
       quoted_spec = quote(do: <<>>)
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:bitstring, [0, nil]}}
 
-
       quoted_spec = quote(do: <<_::5>>)
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:bitstring, [5, nil]}}
 
@@ -67,6 +66,19 @@ defmodule TypeResolveTest do
 
       quoted_spec = quote(do: <<_::7, _::_*8>>)
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:bitstring, [7, 8]}}
+    end
+
+    test "should resolve anonymous functions" do
+      quoted_spec = quote(do: (() -> atom()))
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:function, [{[], {:atom, []}}]}}
+
+      quoted_spec = quote(do: (atom(), integer() -> atom()))
+
+      assert TypeResolve.resolve(quoted_spec) ==
+               {:ok, {:function, [{[{:atom, []}, {:integer, []}], {:atom, []}}]}}
+
+      quoted_spec = quote(do: (... -> atom()))
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:function, [{:any, {:atom, []}}]}}
     end
   end
 

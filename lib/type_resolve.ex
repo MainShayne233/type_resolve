@@ -96,6 +96,19 @@ defmodule TypeResolve do
     {:ok, {:bitstring, [size, unit]}}
   end
 
+  def resolve([{:->, [], [[{:..., _, _}], return_spec]}]) do
+    with {:ok, return_type} <- resolve(return_spec) do
+      {:ok, {:function, [{:any, return_type}]}}
+    end
+  end
+
+  def resolve([{:->, [], [param_specs, return_spec]}]) do
+    with {:ok, param_types} <- maybe_map(param_specs, &resolve/1),
+         {:ok, return_type} <- resolve(return_spec) do
+      {:ok, {:function, [{param_types, return_type}]}}
+    end
+  end
+
   def resolve(other) do
     IO.inspect(other, label: "Failed to resolve")
     :error
