@@ -182,6 +182,19 @@ defmodule TypeResolve do
     end
   end
 
+  def resolve({:{}, [], quoted_elem_specs}) do
+    with {:ok, elem_types} <- maybe_map(quoted_elem_specs, &resolve/1) do
+      {:ok, {:tuple, elem_types}}
+    end
+  end
+
+  def resolve({lhs_quoted_spec, rhs_quoted_spec}) do
+    with {:ok, lhs_type} <- resolve(lhs_quoted_spec),
+         {:ok, rhs_type} <- resolve(rhs_quoted_spec) do
+      {:ok, {:tuple, [lhs_type, rhs_type]}}
+    end
+  end
+
   def resolve(other) do
     IO.inspect(other, label: "Failed to resolve")
     :error

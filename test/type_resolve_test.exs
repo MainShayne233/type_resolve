@@ -108,12 +108,6 @@ defmodule TypeResolveTest do
                {:ok, {:keyword, [some_key: {:integer, []}, another_key: {:float, []}]}}
     end
 
-    # | %{}                                   # empty map
-    # | %{key: value_type}                    # map with required key :key of value_type
-    # | %{required(key_type) => value_type}   # map with required pairs of key_type and value_type
-    # | %{optional(key_type) => value_type}   # map with optional pairs of key_type and value_type
-    # | %SomeStruct{}                         # struct with all fields of any type
-    # | %SomeStruct{key: value_type}          # struct with required key :key of value_type
     test "should resolve literal maps" do
       quoted_spec = quote(do: %{})
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:empty_map, []}}
@@ -174,6 +168,22 @@ defmodule TypeResolveTest do
          ]}
 
       assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
+    end
+
+    test "should resolve literal tuples" do
+      quoted_spec = quote(do: {})
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:tuple, []}}
+
+      quoted_spec = quote(do: {integer()})
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:tuple, [{:integer, []}]}}
+
+      quoted_spec = quote(do: {integer(), atom()}) |> IO.inspect()
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:tuple, [{:integer, []}, {:atom, []}]}}
+
+      quoted_spec = quote(do: {integer(), atom(), float()}) |> IO.inspect()
+
+      assert TypeResolve.resolve(quoted_spec) ==
+               {:ok, {:tuple, [{:integer, []}, {:atom, []}, {:float, []}]}}
     end
   end
 
