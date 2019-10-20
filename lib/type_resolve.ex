@@ -125,9 +125,18 @@ defmodule TypeResolve do
 
   def resolve([:...]), do: {:ok, {:empty_list, []}}
 
-  def resolve([{key, quoted_item_spec} | _] = quoted_keyword_spec) when is_atom(key) do
-    keys = Keyword.keys(quoted_keyword_spec)
-    with {:ok, item_type} <- resolve(quoted_item_spec), do: {:ok, {:keyword, [item_type, keys]}}
+  def resolve([{key, _quoted_item_spec} | _] = quoted_keyword_spec) when is_atom(key) do
+    quoted_keyword_spec
+    |> maybe_map(fn {key, quoted_spec} ->
+      with {:ok, type} <- resolve(quoted_spec), do: {:ok, {key, type}}
+    end)
+    |> case do
+      {:ok, keys_and_types} ->
+        {:ok, {:keyword, keys_and_types}}
+
+      :error ->
+        :error
+    end
   end
 
   def resolve([quoted_item_spec]) do

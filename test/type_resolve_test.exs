@@ -102,10 +102,10 @@ defmodule TypeResolveTest do
       quoted_spec = quote(do: [integer(), ...])
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:non_empty_list, [{:integer, []}]}}
 
-      quoted_spec = quote(do: [some_key: integer(), another_key: integer()])
+      quoted_spec = quote(do: [some_key: integer(), another_key: float()])
 
       assert TypeResolve.resolve(quoted_spec) ==
-               {:ok, {:keyword, [{:integer, []}, [:some_key, :another_key]]}}
+               {:ok, {:keyword, [some_key: {:integer, []}, another_key: {:float, []}]}}
     end
   end
 
