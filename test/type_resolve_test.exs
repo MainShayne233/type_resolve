@@ -88,6 +88,25 @@ defmodule TypeResolveTest do
       quoted_spec = quote(do: 1..10)
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:literal, [1..10]}}
     end
+
+    test "should resolve literal lists" do
+      quoted_spec = quote(do: [integer()])
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:list, [{:integer, []}]}}
+
+      quoted_spec = quote(do: [])
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:empty_list, []}}
+
+      quoted_spec = quote(do: [...])
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:non_empty_list, [{:any, []}]}}
+
+      quoted_spec = quote(do: [integer(), ...])
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:non_empty_list, [{:integer, []}]}}
+
+      quoted_spec = quote(do: [some_key: integer(), another_key: integer()])
+
+      assert TypeResolve.resolve(quoted_spec) ==
+               {:ok, {:keyword, [{:integer, []}, [:some_key, :another_key]]}}
+    end
   end
 
   defp apply_args({quoted_spec_name, options, params}) do

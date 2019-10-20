@@ -115,6 +115,25 @@ defmodule TypeResolve do
     end
   end
 
+  def resolve([quoted_item_spec, {:..., [], _}]) do
+    with {:ok, item_type} <- resolve(quoted_item_spec), do: {:ok, {:non_empty_list, [item_type]}}
+  end
+
+  def resolve([{:..., [], _}]), do: {:ok, {:non_empty_list, [{:any, []}]}}
+
+  def resolve([]), do: {:ok, {:empty_list, []}}
+
+  def resolve([:...]), do: {:ok, {:empty_list, []}}
+
+  def resolve([{key, quoted_item_spec} | _] = quoted_keyword_spec) when is_atom(key) do
+    keys = Keyword.keys(quoted_keyword_spec)
+    with {:ok, item_type} <- resolve(quoted_item_spec), do: {:ok, {:keyword, [item_type, keys]}}
+  end
+
+  def resolve([quoted_item_spec]) do
+    with {:ok, item_type} <- resolve(quoted_item_spec), do: {:ok, {:list, [item_type]}}
+  end
+
   def resolve(other) do
     IO.inspect(other, label: "Failed to resolve")
     :error
