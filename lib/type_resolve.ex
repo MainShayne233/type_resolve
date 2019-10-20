@@ -143,9 +143,61 @@ defmodule TypeResolve do
     with {:ok, item_type} <- resolve(quoted_item_spec), do: {:ok, {:list, [item_type]}}
   end
 
+  def resolve({:%{}, [], []}), do: {:ok, {:empty_map, []}}
+
+  def resolve({:%{}, [], [_ | _] = quoted_map_contents}) do
+    {quoted_required_kvs, quoted_optional_kvs} =
+      Enum.reduce(quoted_map_contents, {[], []}, fn
+        {{:required, [], [quoted_key_spec]}, quoted_value_spec}, {required, optional} ->
+          {[{quoted_key_spec, quoted_value_spec} | required], optional}
+
+        {{:optional, [], [quoted_key_spec]}, quoted_value_spec}, {required, optional} ->
+          {required, [{quoted_key_spec, quoted_value_spec} | optional]}
+
+        {quoted_key_spec, quoted_value_spec}, {required, optional}
+        when is_atom(quoted_key_spec) ->
+          {[{quoted_key_spec, quoted_value_spec} | required], optional}
+      end)
+
+    resolve_keys_and_values = &resolve_kvs(Enum.reverse(&1))
+
+    with {:ok, required_kvs} <- resolve_keys_and_values.(quoted_required_kvs),
+         {:ok, optional_kvs} <- resolve_keys_and_values.(quoted_optional_kvs) do
+      {:ok, {:map, [required_kvs, optional_kvs]}}
+    end
+  end
+
+  def resolve({:%, [], [aliases, {:%{}, [], quoted_required_kvs}]}) do
+    with {:ok, kv_types} <- resolve_kvs(quoted_required_kvs) do
+      module =
+        case aliases do
+          {:__aliases__, [alias: false], module_path} ->
+            Module.concat(module_path)
+
+          {:__aliases__, [alias: module], _} ->
+            module
+        end
+
+      {:ok, {:struct, [module, kv_types]}}
+    end
+  end
+
   def resolve(other) do
     IO.inspect(other, label: "Failed to resolve")
     :error
+  end
+
+  @spec resolve_kvs([{quoted_spec(), quoted_spec()}]) :: result([{type(), type()}])
+  defp resolve_kvs(quoted_kvs) do
+    maybe_map(
+      quoted_kvs,
+      fn {quoted_key_spec, quoted_value_spec} ->
+        with {:ok, key_type} <- resolve(quoted_key_spec),
+             {:ok, value_type} <- resolve(quoted_value_spec) do
+          {:ok, {key_type, value_type}}
+        end
+      end
+    )
   end
 
   @spec maybe_map(Enumerable.t(), (term -> result(term))) :: {:ok, list(term())} | :error

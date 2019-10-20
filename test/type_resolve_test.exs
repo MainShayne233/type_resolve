@@ -107,6 +107,74 @@ defmodule TypeResolveTest do
       assert TypeResolve.resolve(quoted_spec) ==
                {:ok, {:keyword, [some_key: {:integer, []}, another_key: {:float, []}]}}
     end
+
+    # | %{}                                   # empty map
+    # | %{key: value_type}                    # map with required key :key of value_type
+    # | %{required(key_type) => value_type}   # map with required pairs of key_type and value_type
+    # | %{optional(key_type) => value_type}   # map with optional pairs of key_type and value_type
+    # | %SomeStruct{}                         # struct with all fields of any type
+    # | %SomeStruct{key: value_type}          # struct with required key :key of value_type
+    test "should resolve literal maps" do
+      quoted_spec = quote(do: %{})
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:empty_map, []}}
+
+      quoted_spec = quote(do: %{a: integer(), b: float()})
+
+      expected_type =
+        {:map, [[{{:literal, [:a]}, {:integer, []}}, {{:literal, [:b]}, {:float, []}}], []]}
+
+      assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
+
+      quoted_spec =
+        quote(
+          do: %{
+            required(atom()) => integer(),
+            required(integer()) => float(),
+            optional(atom()) => atom()
+          }
+        )
+
+      expected_type =
+        {:map,
+         [
+           [{{:atom, []}, {:integer, []}}, {{:integer, []}, {:float, []}}],
+           [{{:atom, []}, {:atom, []}}]
+         ]}
+
+      assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
+
+      quoted_spec = quote(do: %StructA{})
+      expected_type = {:struct, [StructA, []]}
+      assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
+
+      defmodule StructB, do: defstruct([])
+      quoted_spec = quote(do: %StructB{})
+      expected_type = {:struct, [__MODULE__.StructB, []]}
+      assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
+
+      defmodule StructC, do: defstruct([])
+      alias StructC, as: StructD
+      quoted_spec = quote(do: %StructD{})
+      expected_type = {:struct, [__MODULE__.StructC, []]}
+      assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
+
+      quoted_spec =
+        quote(
+          do: %StructE{
+            some_key: atom(),
+            another_key: integer()
+          }
+        )
+
+      expected_type =
+        {:struct,
+         [
+           StructE,
+           [{{:literal, [:some_key]}, {:atom, []}}, {{:literal, [:another_key]}, {:integer, []}}]
+         ]}
+
+      assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
+    end
   end
 
   defp apply_args({quoted_spec_name, options, params}) do
