@@ -177,13 +177,23 @@ defmodule TypeResolveTest do
       quoted_spec = quote(do: {integer()})
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:tuple, [{:integer, []}]}}
 
-      quoted_spec = quote(do: {integer(), atom()}) |> IO.inspect()
+      quoted_spec = quote(do: {integer(), atom()})
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:tuple, [{:integer, []}, {:atom, []}]}}
 
-      quoted_spec = quote(do: {integer(), atom(), float()}) |> IO.inspect()
+      quoted_spec = quote(do: {integer(), atom(), float()})
 
       assert TypeResolve.resolve(quoted_spec) ==
                {:ok, {:tuple, [{:integer, []}, {:atom, []}, {:float, []}]}}
+    end
+  end
+
+  describe "remote types" do
+    test "should be able to resolve remote types" do
+      quoted_spec = quote(do: String.t())
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:binary, []}}
+
+      quoted_spec = quote(do: String.grapheme())
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:binary, []}}
     end
   end
 

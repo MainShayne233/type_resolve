@@ -195,9 +195,50 @@ defmodule TypeResolve do
     end
   end
 
+  def resolve({{:., [], [{:__aliases__, aliases, module_path}, type_name]}, [], []}) do
+    with {:ok, module} <- resolve_module(aliases, module_path) do
+      resolve_compiled_remote_type(module, type_name)
+    end
+  end
+
   def resolve(other) do
     IO.inspect(other, label: "Failed to resolve")
     :error
+  end
+
+  defp resolve_compiled_remote_type(module, type_name) do
+    with {:ok, compiled_type} <- fetch_compiled_type(module, type_name) do
+      resolve_compiled_type(module, compiled_type)
+    end
+  end
+
+  defp resolve_compiled_type(module, {_, {:user_type, _, type_name, _}, _}) do
+    resolve_compiled_remote_type(module, type_name)
+  end
+
+  defp resolve_compiled_type(_module, type) do
+    {:"::", _, [_, quoted_spec]} = Code.Typespec.type_to_quoted(type)
+    resolve(quoted_spec)
+  end
+
+  defp fetch_compiled_type(module, type_name) do
+    with {:ok, types} <- Code.Typespec.fetch_types(module) do
+      Enum.find_value(types, :error, fn
+        {:type, {^type_name, _, _} = compiled_type} ->
+          {:ok, compiled_type}
+
+        _other ->
+          false
+      end)
+    end
+  end
+
+  defp resolve_module([alias: false], module_path) do
+    {:ok, Module.concat(module_path)}
+  end
+
+  defp resolve_module([alias: module], _module_path) do
+    {:ok, module}
   end
 
   @spec resolve_kvs([{quoted_spec(), quoted_spec()}]) :: result([{type(), type()}])
