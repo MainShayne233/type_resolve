@@ -201,9 +201,29 @@ defmodule TypeResolve do
     end
   end
 
+  def resolve({:|, _, _} = quoted_union_type) do
+    with {:ok, types} <- resolve_union_types(quoted_union_type) do
+      {:ok, {:union, types}}
+    end
+  end
+
   def resolve(other) do
     IO.inspect(other, label: "Failed to resolve")
     :error
+  end
+
+  defp resolve_union_types(quoted_union_types, types \\ [])
+
+  defp resolve_union_types({:|, _, [quoted_spec, rest]}, types) do
+    with {:ok, type} <- resolve(quoted_spec) do
+      resolve_union_types(rest, [type | types])
+    end
+  end
+
+  defp resolve_union_types(quoted_spec, types) do
+    with {:ok, type} <- resolve(quoted_spec) do
+      {:ok, Enum.reverse([type | types])}
+    end
   end
 
   defp resolve_compiled_remote_type(module, type_name) do
@@ -224,7 +244,7 @@ defmodule TypeResolve do
   defp fetch_compiled_type(module, type_name) do
     with {:ok, types} <- Code.Typespec.fetch_types(module) do
       Enum.find_value(types, :error, fn
-        {:type, {^type_name, _, _} = compiled_type} ->
+        {typ, {^type_name, _, _} = compiled_type} when typ in [:type, :typep] ->
           {:ok, compiled_type}
 
         _other ->

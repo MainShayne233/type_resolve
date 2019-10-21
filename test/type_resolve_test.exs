@@ -194,6 +194,19 @@ defmodule TypeResolveTest do
 
       quoted_spec = quote(do: String.grapheme())
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:binary, []}}
+
+      quoted_spec = quote(do: Module.def_kind())
+
+      expected_type =
+        {:union,
+         [
+           {:literal, [:def]},
+           {:literal, [:defp]},
+           {:literal, [:defmacro]},
+           {:literal, [:defmacrop]}
+         ]}
+
+      assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
     end
   end
 
