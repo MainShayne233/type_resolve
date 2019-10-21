@@ -1,5 +1,9 @@
 # TypeResolve
 
+## TODOs
+
+- Fix infinite recursion bug (i.e. Macro.input())
+
 ## Definitions
 
 **Spec**: A type definition in source format (i.e. `integer()` or `String.t()`)

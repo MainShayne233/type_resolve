@@ -114,25 +114,25 @@ defmodule TypeResolve do
     {:ok, {:bitstring, [size, unit]}}
   end
 
-  def resolve([{:->, [], [[{:..., _, _}], return_spec]}], context) do
+  def resolve([{:->, _, [[{:..., _, _}], return_spec]}], context) do
     with {:ok, return_type} <- resolve(return_spec, context) do
       {:ok, {:function, [{:any, return_type}]}}
     end
   end
 
-  def resolve([{:->, [], [param_specs, return_spec]}], context) do
+  def resolve([{:->, _, [param_specs, return_spec]}], context) do
     with {:ok, param_types} <- maybe_map(param_specs, &resolve(&1, context)),
          {:ok, return_type} <- resolve(return_spec, context) do
       {:ok, {:function, [{param_types, return_type}]}}
     end
   end
 
-  def resolve([quoted_item_spec, {:..., [], _}], context) do
+  def resolve([quoted_item_spec, {:..., _, _}], context) do
     with {:ok, item_type} <- resolve(quoted_item_spec, context),
          do: {:ok, {:non_empty_list, [item_type]}}
   end
 
-  def resolve([{:..., [], _}], _context), do: {:ok, {:non_empty_list, [{:any, []}]}}
+  def resolve([{:..., _, _}], _context), do: {:ok, {:non_empty_list, [{:any, []}]}}
 
   def resolve([], _context), do: {:ok, {:empty_list, []}}
 
