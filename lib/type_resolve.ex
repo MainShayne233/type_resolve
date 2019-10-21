@@ -2,6 +2,7 @@ defmodule TypeResolve do
   @type result(data) :: {:ok, data} | :error
   @type quoted_spec :: Macro.t()
   @type type_name :: atom()
+
   @type type_args :: [type()]
   @type type :: {type_name(), type_args()}
   @type basic_type :: term()
@@ -58,17 +59,28 @@ defmodule TypeResolve do
     timeout: quote(do: timeout())
   }
 
+  defmodule Context do
+    @type type :: {atom(), [term()]}
+    @type quoted_spec :: Macro.t()
+    @type t :: %__MODULE__{
+            module: atom() | nil,
+            bindings: [{quoted_spec(), type()}]
+          }
+    defstruct([:module, bindings: []])
+  end
+
   @spec __basic_types__ :: %{required(type_name) => quoted_spec()}
   def __basic_types__, do: @basic_types
 
   @spec __built_in_types__ :: %{required(type_name) => quoted_spec()}
   def __built_in_types__, do: @built_in_types
 
-  @spec resolve(quoted_spec()) :: result(type())
+  @spec resolve(quoted_spec(), Context.t()) :: result(type())
+  def resolve(quoted_spec, context \\ %Context{})
 
   for {type, {quoted_spec_name, _, _params}} <- Map.merge(@basic_types, @built_in_types) do
-    def resolve({unquote(quoted_spec_name), _, params}) do
-      with {:ok, resolved_params} <- maybe_map(params, &resolve/1) do
+    def resolve({unquote(quoted_spec_name), _, params}, context) do
+      with {:ok, resolved_params} <- maybe_map(params, &resolve(&1, context)) do
         {:ok, {unquote(type), resolved_params}}
       end
     end
@@ -76,13 +88,13 @@ defmodule TypeResolve do
 
   defguardp is_literal(value) when is_atom(value) or is_integer(value)
 
-  def resolve(literal) when is_literal(literal), do: {:ok, {:literal, [literal]}}
+  def resolve(literal, _context) when is_literal(literal), do: {:ok, {:literal, [literal]}}
 
-  def resolve({:.., _, [min, max]}) when is_integer(min) and is_integer(max) do
+  def resolve({:.., _, [min, max]}, _context) when is_integer(min) and is_integer(max) do
     {:ok, {:literal, [min..max]}}
   end
 
-  def resolve({:<<>>, [], args}) do
+  def resolve({:<<>>, [], args}, _context) do
     {size, unit} =
       case args do
         [] ->
@@ -102,33 +114,34 @@ defmodule TypeResolve do
     {:ok, {:bitstring, [size, unit]}}
   end
 
-  def resolve([{:->, [], [[{:..., _, _}], return_spec]}]) do
-    with {:ok, return_type} <- resolve(return_spec) do
+  def resolve([{:->, [], [[{:..., _, _}], return_spec]}], context) do
+    with {:ok, return_type} <- resolve(return_spec, context) do
       {:ok, {:function, [{:any, return_type}]}}
     end
   end
 
-  def resolve([{:->, [], [param_specs, return_spec]}]) do
-    with {:ok, param_types} <- maybe_map(param_specs, &resolve/1),
-         {:ok, return_type} <- resolve(return_spec) do
+  def resolve([{:->, [], [param_specs, return_spec]}], context) do
+    with {:ok, param_types} <- maybe_map(param_specs, &resolve(&1, context)),
+         {:ok, return_type} <- resolve(return_spec, context) do
       {:ok, {:function, [{param_types, return_type}]}}
     end
   end
 
-  def resolve([quoted_item_spec, {:..., [], _}]) do
-    with {:ok, item_type} <- resolve(quoted_item_spec), do: {:ok, {:non_empty_list, [item_type]}}
+  def resolve([quoted_item_spec, {:..., [], _}], context) do
+    with {:ok, item_type} <- resolve(quoted_item_spec, context),
+         do: {:ok, {:non_empty_list, [item_type]}}
   end
 
-  def resolve([{:..., [], _}]), do: {:ok, {:non_empty_list, [{:any, []}]}}
+  def resolve([{:..., [], _}], _context), do: {:ok, {:non_empty_list, [{:any, []}]}}
 
-  def resolve([]), do: {:ok, {:empty_list, []}}
+  def resolve([], _context), do: {:ok, {:empty_list, []}}
 
-  def resolve([:...]), do: {:ok, {:empty_list, []}}
+  def resolve([:...], _context), do: {:ok, {:empty_list, []}}
 
-  def resolve([{key, _quoted_item_spec} | _] = quoted_keyword_spec) when is_atom(key) do
+  def resolve([{key, _quoted_item_spec} | _] = quoted_keyword_spec, context) when is_atom(key) do
     quoted_keyword_spec
     |> maybe_map(fn {key, quoted_spec} ->
-      with {:ok, type} <- resolve(quoted_spec), do: {:ok, {key, type}}
+      with {:ok, type} <- resolve(quoted_spec, context), do: {:ok, {key, type}}
     end)
     |> case do
       {:ok, keys_and_types} ->
@@ -139,13 +152,13 @@ defmodule TypeResolve do
     end
   end
 
-  def resolve([quoted_item_spec]) do
-    with {:ok, item_type} <- resolve(quoted_item_spec), do: {:ok, {:list, [item_type]}}
+  def resolve([quoted_item_spec], context) do
+    with {:ok, item_type} <- resolve(quoted_item_spec, context), do: {:ok, {:list, [item_type]}}
   end
 
-  def resolve({:%{}, [], []}), do: {:ok, {:empty_map, []}}
+  def resolve({:%{}, [], []}, _context), do: {:ok, {:empty_map, []}}
 
-  def resolve({:%{}, [], [_ | _] = quoted_map_contents}) do
+  def resolve({:%{}, [], [_ | _] = quoted_map_contents}, context) do
     {quoted_required_kvs, quoted_optional_kvs} =
       Enum.reduce(quoted_map_contents, {[], []}, fn
         {{:required, [], [quoted_key_spec]}, quoted_value_spec}, {required, optional} ->
@@ -159,7 +172,7 @@ defmodule TypeResolve do
           {[{quoted_key_spec, quoted_value_spec} | required], optional}
       end)
 
-    resolve_keys_and_values = &resolve_kvs(Enum.reverse(&1))
+    resolve_keys_and_values = &resolve_kvs(Enum.reverse(&1), context)
 
     with {:ok, required_kvs} <- resolve_keys_and_values.(quoted_required_kvs),
          {:ok, optional_kvs} <- resolve_keys_and_values.(quoted_optional_kvs) do
@@ -167,8 +180,8 @@ defmodule TypeResolve do
     end
   end
 
-  def resolve({:%, [], [aliases, {:%{}, [], quoted_required_kvs}]}) do
-    with {:ok, kv_types} <- resolve_kvs(quoted_required_kvs) do
+  def resolve({:%, [], [aliases, {:%{}, [], quoted_required_kvs}]}, context) do
+    with {:ok, kv_types} <- resolve_kvs(quoted_required_kvs, context) do
       module =
         case aliases do
           {:__aliases__, [alias: false], module_path} ->
@@ -182,75 +195,104 @@ defmodule TypeResolve do
     end
   end
 
-  def resolve({:{}, _, quoted_elem_specs}) do
-    with {:ok, elem_types} <- maybe_map(quoted_elem_specs, &resolve/1) do
+  def resolve({:{}, _, quoted_elem_specs}, context) do
+    with {:ok, elem_types} <- maybe_map(quoted_elem_specs, &resolve(&1, context)) do
       {:ok, {:tuple, elem_types}}
     end
   end
 
-  def resolve({lhs_quoted_spec, rhs_quoted_spec}) do
-    with {:ok, lhs_type} <- resolve(lhs_quoted_spec),
-         {:ok, rhs_type} <- resolve(rhs_quoted_spec) do
+  def resolve({lhs_quoted_spec, rhs_quoted_spec}, context) do
+    with {:ok, lhs_type} <- resolve(lhs_quoted_spec, context),
+         {:ok, rhs_type} <- resolve(rhs_quoted_spec, context) do
       {:ok, {:tuple, [lhs_type, rhs_type]}}
     end
   end
 
-  def resolve({{:., _, module_info}, _, _}) do
-    with {:ok, {module, type_name}} <- resolve_remote_module_and_type_name(module_info) do
-      resolve_compiled_remote_type(module, type_name)
+  def resolve({{:., _, module_info}, _, quoted_args}, context) do
+    with {:ok, {module, type_name}} <- resolve_remote_module_and_type_name(module_info),
+         {:ok, type_args} <- maybe_map(quoted_args, &resolve(&1, context)) do
+      resolve_compiled_remote_type(module, type_name, type_args)
     end
   end
 
-  def resolve({:|, _, _} = quoted_union_type) do
-    with {:ok, types} <- resolve_union_types(quoted_union_type) do
+  def resolve({:|, _, _} = quoted_union_type, context) do
+    with {:ok, types} <- resolve_union_types(quoted_union_type, context) do
       {:ok, {:union, types}}
     end
   end
 
-  def resolve(other) do
-    IO.inspect(other, label: "Failed to resolve")
-    :error
-  end
-
-  defp resolve_union_types(quoted_union_types, types \\ [])
-
-  defp resolve_union_types({:|, _, [quoted_spec, rest]}, types) do
-    with {:ok, type} <- resolve(quoted_spec) do
-      resolve_union_types(rest, [type | types])
+  def resolve(quoted_spec, context) do
+    with :error <- resolve_type_from_binding(quoted_spec, context),
+         :error <- resolve_type_from_context_module(quoted_spec, context) do
+      IO.inspect({quoted_spec, context}, label: "Failed to resolve")
+      :error
     end
   end
 
-  defp resolve_union_types(quoted_spec, types) do
-    with {:ok, type} <- resolve(quoted_spec) do
+  defp resolve_type_from_binding(quoted_spec, context) do
+    Enum.find_value(context.bindings, :error, fn
+      {^quoted_spec, arg_type} ->
+        {:ok, arg_type}
+
+      _other ->
+        false
+    end)
+  end
+
+  defp resolve_type_from_context_module(quoted_spec, context) do
+    with {type_name, _, _} <- quoted_spec,
+         module when is_atom(module) <- context.module do
+      resolve_compiled_remote_type(module, type_name, [])
+    end
+  end
+
+  defp resolve_union_types(quoted_union_types, context, types \\ [])
+
+  defp resolve_union_types({:|, _, [quoted_spec, rest]}, context, types) do
+    with {:ok, type} <- resolve(quoted_spec, context) do
+      resolve_union_types(rest, context, [type | types])
+    end
+  end
+
+  defp resolve_union_types(quoted_spec, context, types) do
+    with {:ok, type} <- resolve(quoted_spec, context) do
       {:ok, Enum.reverse([type | types])}
     end
   end
 
-  defp resolve_compiled_remote_type(module, type_name) do
-    with {:ok, compiled_type} <- fetch_compiled_type(module, type_name) do
-      resolve_compiled_type(module, compiled_type)
+  defp resolve_compiled_remote_type(module, type_name, type_args) do
+    with {:ok, compiled_type} <- fetch_compiled_type(module, type_name, type_args) do
+      resolve_compiled_type(module, compiled_type, type_args)
     end
   end
 
-  defp resolve_compiled_type(module, {_, {:user_type, _, type_name, _}, _}) do
-    resolve_compiled_remote_type(module, type_name)
+  defp resolve_compiled_type(module, {_, {:user_type, _, type_name, _}, _}, type_args) do
+    resolve_compiled_remote_type(module, type_name, type_args)
   end
 
-  defp resolve_compiled_type(_module, type) do
-    {:"::", _, [_, quoted_spec]} = Code.Typespec.type_to_quoted(type)
-    resolve(quoted_spec)
+  defp resolve_compiled_type(module, type, type_args) do
+    {:"::", _, [{_, [], params}, quoted_spec]} = Code.Typespec.type_to_quoted(type)
+    resolve(quoted_spec, %Context{module: module, bindings: Enum.zip(params, type_args)})
   end
 
-  defp fetch_compiled_type(module, type_name) do
+  defp fetch_compiled_type(module, type_name, type_args) do
     with {:ok, types} <- Code.Typespec.fetch_types(module) do
       Enum.find_value(types, :error, fn
-        {typ, {^type_name, _, _} = compiled_type} when typ in [:type, :typep] ->
+        {_, {^type_name, _, type_params} = compiled_type}
+        when length(type_params) == length(type_args) ->
           {:ok, compiled_type}
 
         _other ->
           false
       end)
     end
+  end
+
+  defp resolve_remote_module_and_type_name([
+         {:__aliases__, [counter: {module_prefix, _}], [{_, _, _}, module_part]},
+         type_name
+       ]) do
+    {:ok, {Module.concat([module_prefix, module_part]), type_name}}
   end
 
   defp resolve_remote_module_and_type_name([
@@ -269,13 +311,13 @@ defmodule TypeResolve do
     {:ok, {module, type_name}}
   end
 
-  @spec resolve_kvs([{quoted_spec(), quoted_spec()}]) :: result([{type(), type()}])
-  defp resolve_kvs(quoted_kvs) do
+  @spec resolve_kvs([{quoted_spec(), quoted_spec()}], Context.t()) :: result([{type(), type()}])
+  defp resolve_kvs(quoted_kvs, context) do
     maybe_map(
       quoted_kvs,
       fn {quoted_key_spec, quoted_value_spec} ->
-        with {:ok, key_type} <- resolve(quoted_key_spec),
-             {:ok, value_type} <- resolve(quoted_value_spec) do
+        with {:ok, key_type} <- resolve(quoted_key_spec, context),
+             {:ok, value_type} <- resolve(quoted_value_spec, context) do
           {:ok, {key_type, value_type}}
         end
       end

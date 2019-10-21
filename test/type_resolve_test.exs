@@ -216,6 +216,40 @@ defmodule TypeResolveTest do
     end
   end
 
+  describe "User-defined Types" do
+    test "should resolve user defined types" do
+      quoted_spec = quote(do: TypeResolver.Private.SampleClient.support())
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:binary, []}}
+
+      quoted_spec = quote(do: TypeResolver.Private.SampleClient.status())
+
+      expected_type = {
+        :union,
+        [
+          literal: [:pending],
+          literal: [:success],
+          literal: [:failure]
+        ]
+      }
+
+      assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
+
+      quoted_spec = quote(do: TypeResolver.Private.SampleClient.t())
+      assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
+
+      quoted_spec = quote(do: TypeResolver.Private.SampleClient.union())
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:union, [{:binary, []}, expected_type]}}
+
+      quoted_spec = quote(do: TypeResolver.Private.SampleClient.result())
+      expected_type = {:union, [{:tuple, [{:literal, [:ok]}, {:term, []}]}, {:literal, [:error]}]}
+      assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
+
+      quoted_spec = quote(do: TypeResolver.Private.SampleClient.result(atom()))
+      expected_type = {:union, [{:tuple, [{:literal, [:ok]}, {:atom, []}]}, {:literal, [:error]}]}
+      assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
+    end
+  end
+
   defp apply_args({quoted_spec_name, options, params}) do
     args =
       Enum.take(
