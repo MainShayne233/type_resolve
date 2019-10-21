@@ -218,10 +218,10 @@ defmodule TypeResolveTest do
 
   describe "User-defined Types" do
     test "should resolve user defined types" do
-      quoted_spec = quote(do: TypeResolver.Private.SampleClient.support())
+      quoted_spec = quote(do: TypeResolve.Private.SampleClient.support())
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:binary, []}}
 
-      quoted_spec = quote(do: TypeResolver.Private.SampleClient.status())
+      quoted_spec = quote(do: TypeResolve.Private.SampleClient.status())
 
       expected_type = {
         :union,
@@ -234,24 +234,24 @@ defmodule TypeResolveTest do
 
       assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
 
-      quoted_spec = quote(do: TypeResolver.Private.SampleClient.t())
+      quoted_spec = quote(do: TypeResolve.Private.SampleClient.t())
       assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
 
-      quoted_spec = quote(do: TypeResolver.Private.SampleClient.union())
+      quoted_spec = quote(do: TypeResolve.Private.SampleClient.union())
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:union, [{:binary, []}, expected_type]}}
 
-      quoted_spec = quote(do: TypeResolver.Private.SampleClient.result())
+      quoted_spec = quote(do: TypeResolve.Private.SampleClient.result())
       expected_type = {:union, [{:tuple, [{:literal, [:ok]}, {:term, []}]}, {:literal, [:error]}]}
       assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
 
-      quoted_spec = quote(do: TypeResolver.Private.SampleClient.result(atom()))
+      quoted_spec = quote(do: TypeResolve.Private.SampleClient.result(atom()))
       expected_type = {:union, [{:tuple, [{:literal, [:ok]}, {:atom, []}]}, {:literal, [:error]}]}
       assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
 
-      quoted_spec = quote(do: TypeResolver.Private.SampleClient.email())
+      quoted_spec = quote(do: TypeResolve.Private.SampleClient.email())
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:binary, []}}
 
-      quoted_spec = quote(do: TypeResolver.Private.SampleClient.pemail())
+      quoted_spec = quote(do: TypeResolve.Private.SampleClient.pemail())
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:binary, []}}
     end
   end

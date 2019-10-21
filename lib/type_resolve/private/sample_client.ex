@@ -1,9 +1,9 @@
-defmodule TypeResolver.Private.SupportingModule do
+defmodule TypeResolve.Private.SupportingModule do
   @type t :: binary()
 end
 
-defmodule TypeResolver.Private.SampleClient do
-  alias TypeResolver.Private.SupportingModule, as: Support
+defmodule TypeResolve.Private.SampleClient do
+  alias TypeResolve.Private.SupportingModule, as: Support
 
   @type status :: :pending | :success | :failure
 
