@@ -16,4 +16,8 @@ defmodule TypeResolver.Private.SampleClient do
   @type result :: {:ok, term()} | :error
 
   @type result(t) :: {:ok, t} | :error
+
+  @typep pemail :: binary()
+
+  @type email :: pemail()
 end

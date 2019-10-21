@@ -247,6 +247,12 @@ defmodule TypeResolveTest do
       quoted_spec = quote(do: TypeResolver.Private.SampleClient.result(atom()))
       expected_type = {:union, [{:tuple, [{:literal, [:ok]}, {:atom, []}]}, {:literal, [:error]}]}
       assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
+
+      quoted_spec = quote(do: TypeResolver.Private.SampleClient.email())
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:binary, []}}
+
+      quoted_spec = quote(do: TypeResolver.Private.SampleClient.pemail())
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:binary, []}}
     end
   end
 
