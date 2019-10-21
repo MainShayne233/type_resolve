@@ -195,6 +195,9 @@ defmodule TypeResolveTest do
       quoted_spec = quote(do: String.grapheme())
       assert TypeResolve.resolve(quoted_spec) == {:ok, {:binary, []}}
 
+      quoted_spec = quote(do: Module.definition())
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:tuple, [{:atom, []}, {:arity, []}]}}
+
       quoted_spec = quote(do: Module.def_kind())
 
       expected_type =
@@ -207,6 +210,9 @@ defmodule TypeResolveTest do
          ]}
 
       assert TypeResolve.resolve(quoted_spec) == {:ok, expected_type}
+
+      quoted_spec = quote(do: Enum.t())
+      assert TypeResolve.resolve(quoted_spec) == {:ok, {:term, []}}
     end
   end
 

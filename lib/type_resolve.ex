@@ -182,7 +182,7 @@ defmodule TypeResolve do
     end
   end
 
-  def resolve({:{}, [], quoted_elem_specs}) do
+  def resolve({:{}, _, quoted_elem_specs}) do
     with {:ok, elem_types} <- maybe_map(quoted_elem_specs, &resolve/1) do
       {:ok, {:tuple, elem_types}}
     end
@@ -195,8 +195,8 @@ defmodule TypeResolve do
     end
   end
 
-  def resolve({{:., [], [{:__aliases__, aliases, module_path}, type_name]}, [], []}) do
-    with {:ok, module} <- resolve_module(aliases, module_path) do
+  def resolve({{:., _, module_info}, _, _}) do
+    with {:ok, {module, type_name}} <- resolve_remote_module_and_type_name(module_info) do
       resolve_compiled_remote_type(module, type_name)
     end
   end
@@ -253,12 +253,20 @@ defmodule TypeResolve do
     end
   end
 
-  defp resolve_module([alias: false], module_path) do
-    {:ok, Module.concat(module_path)}
+  defp resolve_remote_module_and_type_name([
+         {:__aliases__, [alias: false], module_path},
+         type_name
+       ]) do
+    {:ok, {Module.concat(module_path), type_name}}
   end
 
-  defp resolve_module([alias: module], _module_path) do
-    {:ok, module}
+  defp resolve_remote_module_and_type_name([{:__aliases__, [alias: module], _}, type_name])
+       when is_atom(module) do
+    {:ok, {module, type_name}}
+  end
+
+  defp resolve_remote_module_and_type_name([module, type_name]) when is_atom(module) do
+    {:ok, {module, type_name}}
   end
 
   @spec resolve_kvs([{quoted_spec(), quoted_spec()}]) :: result([{type(), type()}])
