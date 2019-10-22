@@ -1,5 +1,6 @@
 defmodule TypeResolveTest do
   use ExUnit.Case
+  use TypeResolve.TestUtil
   doctest TypeResolve
 
   describe "basic types" do
@@ -20,12 +21,14 @@ defmodule TypeResolveTest do
 
     test "should resolve type arguments properly" do
       quoted_spec = quote(do: list(integer()))
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:list, [{:integer, []}]}}
+      expected_type = {:list, [{:integer, []}]}
+      assert_resolve(quoted_spec, expected_type)
     end
 
     test "should resolve basic types that usually have args but are not being passed in" do
       quoted_spec = quote(do: list())
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:list, []}}
+      expected_type = {:list, []}
+      assert_resolve(quoted_spec, expected_type)
     end
   end
 
@@ -45,84 +48,118 @@ defmodule TypeResolveTest do
   describe "literals" do
     test "should resolve literal types" do
       quoted_spec = quote(do: :an_atom)
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:literal, [:an_atom]}}
+      expected_type = {:literal, [:an_atom]}
+      assert_resolve(quoted_spec, expected_type)
 
       quoted_spec = quote(do: true)
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:literal, [true]}}
+      expected_type = {:literal, [true]}
+      assert_resolve(quoted_spec, expected_type)
 
       quoted_spec = quote(do: nil)
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:literal, [nil]}}
+      expected_type = {:literal, [nil]}
+      assert_resolve(quoted_spec, expected_type)
     end
 
-    test "should resolve literal bitstring specs" do
+    test "should resolve an empty bitstring spec" do
       quoted_spec = quote(do: <<>>)
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:bitstring, [0, nil]}}
-
-      quoted_spec = quote(do: <<_::5>>)
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:bitstring, [5, nil]}}
-
-      quoted_spec = quote(do: <<_::_*6>>)
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:bitstring, [nil, 6]}}
-
-      quoted_spec = quote(do: <<_::7, _::_*8>>)
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:bitstring, [7, 8]}}
+      expected_type = {:bitstring, [0, nil]}
+      assert_resolve(quoted_spec, expected_type)
     end
 
-    test "should resolve anonymous functions" do
+    test "should resolve a bitstring spec with a size specified" do
+      quoted_spec = quote(do: <<_::5>>)
+      expected_type = {:bitstring, [5, nil]}
+      assert_resolve(quoted_spec, expected_type)
+    end
+
+    test "should resolve a bitstring spec with a unit specified" do
+      quoted_spec = quote(do: <<_::_*6>>)
+      expected_type = {:bitstring, [nil, 6]}
+      assert_resolve(quoted_spec, expected_type)
+    end
+
+    test "should resolve a bitstring spec with both a size and unit specified" do
+      quoted_spec = quote(do: <<_::7, _::_*8>>)
+      expected_type = {:bitstring, [7, 8]}
+      assert_resolve(quoted_spec, expected_type)
+    end
+
+    test "should resolve 0-arity anonymous functions" do
       quoted_spec = quote(do: (() -> atom()))
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:function, [{[], {:atom, []}}]}}
+      expected_type = {:function, [{[], {:atom, []}}]}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve 1+-arity anonymous functions" do
       quoted_spec = quote(do: (atom(), integer() -> atom()))
+      expected_type = {:function, [{[{:atom, []}, {:integer, []}], {:atom, []}}]}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
-      assert TypeResolve.from_quoted_type(quoted_spec) ==
-               {:ok, {:function, [{[{:atom, []}, {:integer, []}], {:atom, []}}]}}
-
+    test "should resolve any-arity anonymous functions" do
       quoted_spec = quote(do: (... -> atom()))
-
-      assert TypeResolve.from_quoted_type(quoted_spec) ==
-               {:ok, {:function, [{:any, {:atom, []}}]}}
+      expected_type = {:function, [{:any, {:atom, []}}]}
+      assert_resolve(quoted_spec, expected_type)
     end
 
     test "should resolve literal integers" do
       quoted_spec = quote(do: 5)
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:literal, [5]}}
+      expected_type = {:literal, [5]}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve literal ranges" do
       quoted_spec = quote(do: 1..10)
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:literal, [1..10]}}
+      expected_type = {:literal, [1..10]}
+      assert_resolve(quoted_spec, expected_type)
     end
 
-    test "should resolve literal lists" do
+    test "should resolve literal lists of a single type" do
       quoted_spec = quote(do: [integer()])
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:list, [{:integer, []}]}}
-
-      quoted_spec = quote(do: [])
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:empty_list, []}}
-
-      quoted_spec = quote(do: [...])
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:non_empty_list, [{:any, []}]}}
-
-      quoted_spec = quote(do: [integer(), ...])
-
-      assert TypeResolve.from_quoted_type(quoted_spec) ==
-               {:ok, {:non_empty_list, [{:integer, []}]}}
-
-      quoted_spec = quote(do: [some_key: integer(), another_key: float()])
-
-      assert TypeResolve.from_quoted_type(quoted_spec) ==
-               {:ok, {:keyword, [some_key: {:integer, []}, another_key: {:float, []}]}}
+      expected_type = {:list, [{:integer, []}]}
+      assert_resolve(quoted_spec, expected_type)
     end
 
-    test "should resolve literal maps" do
-      quoted_spec = quote(do: %{})
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:empty_map, []}}
+    test "should resolve empty lists" do
+      quoted_spec = quote(do: [])
+      expected_type = {:empty_list, []}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve non-empty lists of any type" do
+      quoted_spec = quote(do: [...])
+      expected_type = {:non_empty_list, [{:any, []}]}
+      assert_resolve(quoted_spec, expected_type)
+    end
+
+    test "should resolve non-empty lists of a specific type" do
+      quoted_spec = quote(do: [integer(), ...])
+      expected_type = {:non_empty_list, [{:integer, []}]}
+      assert_resolve(quoted_spec, expected_type)
+    end
+
+    test "should resolve keyword lists" do
+      quoted_spec = quote(do: [some_key: integer(), another_key: float()])
+      expected_type = {:keyword, [some_key: {:integer, []}, another_key: {:float, []}]}
+      assert_resolve(quoted_spec, expected_type)
+    end
+
+    test "should resolve literal empty maps" do
+      quoted_spec = quote(do: %{})
+      expected_type = {:empty_map, []}
+      assert_resolve(quoted_spec, expected_type)
+    end
+
+    test "should resolve literal maps with literal keys" do
       quoted_spec = quote(do: %{a: integer(), b: float()})
 
       expected_type =
         {:map, [[{{:literal, [:a]}, {:integer, []}}, {{:literal, [:b]}, {:float, []}}], []]}
 
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, expected_type}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve literal maps with required/optional kvs" do
       quoted_spec =
         quote(
           do: %{
@@ -139,23 +176,31 @@ defmodule TypeResolveTest do
            [{{:atom, []}, {:atom, []}}]
          ]}
 
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, expected_type}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve undefined structs" do
       quoted_spec = quote(do: %StructA{})
       expected_type = {:struct, [StructA, []]}
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, expected_type}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve defined structs" do
       defmodule StructB, do: defstruct([])
       quoted_spec = quote(do: %StructB{})
       expected_type = {:struct, [__MODULE__.StructB, []]}
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, expected_type}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve defined structs that have been aliases" do
       defmodule StructC, do: defstruct([])
       alias StructC, as: StructD
       quoted_spec = quote(do: %StructD{})
       expected_type = {:struct, [__MODULE__.StructC, []]}
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, expected_type}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve defined structs with defined kvs" do
       quoted_spec =
         quote(
           do: %StructE{
@@ -171,41 +216,54 @@ defmodule TypeResolveTest do
            [{{:literal, [:some_key]}, {:atom, []}}, {{:literal, [:another_key]}, {:integer, []}}]
          ]}
 
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, expected_type}
+      assert_resolve(quoted_spec, expected_type)
     end
 
-    test "should resolve literal tuples" do
+    test "should resolve literal empty tuples" do
       quoted_spec = quote(do: {})
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:tuple, []}}
+      expected_type = {:tuple, []}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve literal tuples with 1 element" do
       quoted_spec = quote(do: {integer()})
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:tuple, [{:integer, []}]}}
+      expected_type = {:tuple, [{:integer, []}]}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve literal tuples with 2 elements" do
       quoted_spec = quote(do: {integer(), atom()})
+      expected_type = {:tuple, [{:integer, []}, {:atom, []}]}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
-      assert TypeResolve.from_quoted_type(quoted_spec) ==
-               {:ok, {:tuple, [{:integer, []}, {:atom, []}]}}
-
+    test "should resolve literal tuples with 3 elements" do
       quoted_spec = quote(do: {integer(), atom(), float()})
-
-      assert TypeResolve.from_quoted_type(quoted_spec) ==
-               {:ok, {:tuple, [{:integer, []}, {:atom, []}, {:float, []}]}}
+      expected_type = {:tuple, [{:integer, []}, {:atom, []}, {:float, []}]}
+      assert_resolve(quoted_spec, expected_type)
     end
   end
 
   describe "remote types" do
-    test "should be able to resolve remote types" do
+    test "should resolve a remote type that simply points to a plain type" do
       quoted_spec = quote(do: String.t())
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:binary, []}}
+      expected_type = {:binary, []}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve a remote type that points to another remote type" do
       quoted_spec = quote(do: String.grapheme())
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:binary, []}}
+      expected_type = {:binary, []}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve a remote type that points to a non-trivial type" do
       quoted_spec = quote(do: Module.definition())
+      expected_type = {:tuple, [{:atom, []}, {:arity, []}]}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
-      assert TypeResolve.from_quoted_type(quoted_spec) ==
-               {:ok, {:tuple, [{:atom, []}, {:arity, []}]}}
-
+    test "should resolve a remote type that points to a union type" do
       quoted_spec = quote(do: Module.def_kind())
 
       expected_type =
@@ -217,11 +275,16 @@ defmodule TypeResolveTest do
            {:literal, [:defmacrop]}
          ]}
 
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, expected_type}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve a remote type that points to another remote type defined in another module" do
       quoted_spec = quote(do: Enum.t())
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:term, []}}
+      expected_type = {:term, []}
+      assert_resolve(quoted_spec, expected_type)
+    end
 
+    test "should resolve a remote type is a union of other remote types" do
       quoted_spec = quote(do: Access.t())
       expected_type = {:union, [keyword: [], struct: [], map: [], literal: [nil], any: []]}
       assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, expected_type}
@@ -229,10 +292,10 @@ defmodule TypeResolveTest do
   end
 
   describe "User-defined Types" do
-    @tag :only
     test "should resolve user defined types" do
       quoted_spec = quote(do: TypeResolve.Private.SampleClient.support())
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:binary, []}}
+      expected_type = {:binary, []}
+      assert_resolve(quoted_spec, expected_type)
 
       quoted_spec = quote(do: TypeResolve.Private.SampleClient.status())
 
@@ -245,40 +308,40 @@ defmodule TypeResolveTest do
         ]
       }
 
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, expected_type}
+      assert_resolve(quoted_spec, expected_type)
 
       quoted_spec = quote(do: TypeResolve.Private.SampleClient.t())
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, expected_type}
+      assert_resolve(quoted_spec, expected_type)
 
       quoted_spec = quote(do: TypeResolve.Private.SampleClient.union())
 
-      assert TypeResolve.from_quoted_type(quoted_spec) ==
-               {
-                 :ok,
-                 {
-                   :union,
-                   [
-                     binary: '',
-                     literal: [:pending],
-                     literal: [:success],
-                     literal: [:failure]
-                   ]
-                 }
-               }
+      expected_type = {
+        :union,
+        [
+          binary: '',
+          literal: [:pending],
+          literal: [:success],
+          literal: [:failure]
+        ]
+      }
+
+      assert_resolve(quoted_spec, expected_type)
 
       quoted_spec = quote(do: TypeResolve.Private.SampleClient.result())
       expected_type = {:union, [{:tuple, [{:literal, [:ok]}, {:term, []}]}, {:literal, [:error]}]}
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, expected_type}
+      assert_resolve(quoted_spec, expected_type)
 
       quoted_spec = quote(do: TypeResolve.Private.SampleClient.result(atom()))
       expected_type = {:union, [{:tuple, [{:literal, [:ok]}, {:atom, []}]}, {:literal, [:error]}]}
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, expected_type}
+      assert_resolve(quoted_spec, expected_type)
 
       quoted_spec = quote(do: TypeResolve.Private.SampleClient.email())
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:binary, []}}
+      expected_type = {:binary, []}
+      assert_resolve(quoted_spec, expected_type)
 
       quoted_spec = quote(do: TypeResolve.Private.SampleClient.pemail())
-      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:binary, []}}
+      expected_type = {:binary, []}
+      assert_resolve(quoted_spec, expected_type)
     end
   end
 

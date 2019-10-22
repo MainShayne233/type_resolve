@@ -239,7 +239,7 @@ defmodule TypeResolve do
   defp do_from_quoted_type({{:., _, module_info}, _, quoted_args}, context) do
     with {:ok, {module, type_name}} <- resolve_remote_module_and_type_name(module_info),
          {:ok, type_args} <- maybe_map(quoted_args, &do_from_quoted_type(&1, context)) do
-      resolve_compiled_remote_type(module, type_name, type_args)
+      resolve_compiled_remote_type(module, type_name, type_args, context)
     end
   end
 
@@ -251,7 +251,11 @@ defmodule TypeResolve do
 
   defp do_from_quoted_type(quoted_spec, context) do
     with :error <- resolve_type_from_binding(quoted_spec, context),
-         :error <- resolve_type_from_context_module(quoted_spec, context) do
+         :error <-
+           resolve_type_from_context_module(quoted_spec, %Context{
+             context
+             | type_path: [quoted_spec | context.type_path]
+           }) do
       IO.inspect({quoted_spec, context}, label: "Failed to resolve")
       :error
     end
@@ -270,7 +274,7 @@ defmodule TypeResolve do
   defp resolve_type_from_context_module(quoted_spec, context) do
     with {type_name, _, _} <- quoted_spec,
          module when is_atom(module) <- context.module do
-      resolve_compiled_remote_type(module, type_name, [])
+      resolve_compiled_remote_type(module, type_name, [], context)
     end
   end
 
@@ -288,22 +292,23 @@ defmodule TypeResolve do
     end
   end
 
-  defp resolve_compiled_remote_type(module, type_name, type_args) do
+  defp resolve_compiled_remote_type(module, type_name, type_args, context) do
     with {:ok, compiled_type} <- fetch_compiled_type(module, type_name, type_args) do
-      resolve_compiled_type(module, compiled_type, type_args)
+      resolve_compiled_type(module, compiled_type, type_args, context)
     end
   end
 
-  defp resolve_compiled_type(module, {_, {:user_type, _, type_name, _}, _}, type_args) do
-    resolve_compiled_remote_type(module, type_name, type_args)
+  defp resolve_compiled_type(module, {_, {:user_type, _, type_name, _}, _}, type_args, context) do
+    resolve_compiled_remote_type(module, type_name, type_args, context)
   end
 
-  defp resolve_compiled_type(module, type, type_args) do
+  defp resolve_compiled_type(module, type, type_args, context) do
     {:"::", _, [{_, [], params}, quoted_spec]} = Code.Typespec.type_to_quoted(type)
 
     do_from_quoted_type(quoted_spec, %Context{
-      module: module,
-      bindings: Enum.zip(params, type_args)
+      context
+      | module: module,
+        bindings: Enum.zip(params, type_args)
     })
   end
 
