@@ -221,10 +221,15 @@ defmodule TypeResolveTest do
 
       quoted_spec = quote(do: Enum.t())
       assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:term, []}}
+
+      quoted_spec = quote(do: Access.t())
+      expected_type = {:union, [keyword: [], struct: [], map: [], literal: [nil], any: []]}
+      assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, expected_type}
     end
   end
 
   describe "User-defined Types" do
+    @tag :only
     test "should resolve user defined types" do
       quoted_spec = quote(do: TypeResolve.Private.SampleClient.support())
       assert TypeResolve.from_quoted_type(quoted_spec) == {:ok, {:binary, []}}
@@ -248,7 +253,18 @@ defmodule TypeResolveTest do
       quoted_spec = quote(do: TypeResolve.Private.SampleClient.union())
 
       assert TypeResolve.from_quoted_type(quoted_spec) ==
-               {:ok, {:union, [{:binary, []}, expected_type]}}
+               {
+                 :ok,
+                 {
+                   :union,
+                   [
+                     binary: '',
+                     literal: [:pending],
+                     literal: [:success],
+                     literal: [:failure]
+                   ]
+                 }
+               }
 
       quoted_spec = quote(do: TypeResolve.Private.SampleClient.result())
       expected_type = {:union, [{:tuple, [{:literal, [:ok]}, {:term, []}]}, {:literal, [:error]}]}
