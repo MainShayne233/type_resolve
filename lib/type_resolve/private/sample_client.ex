@@ -20,4 +20,6 @@ defmodule TypeResolve.Private.SampleClient do
   @typep pemail :: binary()
 
   @type email :: pemail()
+
+  @type role :: :guest | :user | :admin | [role()]
 end
